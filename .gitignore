@@ -2,3 +2,6 @@ login*
 .idea/
 giveaway.html*
 *.pyc
+ignore*
+EnteredGiveaways*
+RejectedGiveaways*
