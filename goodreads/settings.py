@@ -9,14 +9,14 @@
 #     http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html
 #     http://scrapy.readthedocs.org/en/latest/topics/spider-middleware.html
 
-BOT_NAME = 'goodreads'
+BOT_NAME = 'goodreadsGiveaway'
 
 SPIDER_MODULES = ['goodreads.spiders']
 NEWSPIDER_MODULE = 'goodreads.spiders'
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = 'goodreads (+http://www.yourdomain.com)'
+#USER_AGENT = 'goodreadsGiveaway (+https://github.com/kaushikthedeveloper/Goodreads-Giveaway-BOT)'
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
@@ -90,4 +90,4 @@ AUTOTHROTTLE_ENABLED = True
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
 
 COOKIES_ENABLED = True
-COOKIES_DEBUG = True
+#COOKIES_DEBUG = True
