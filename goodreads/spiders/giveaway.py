@@ -4,6 +4,7 @@ from scrapy import FormRequest
 from datetime import datetime
 from scrapy.shell import inspect_response
 
+# $scrapy crawl giveaway -a username='...username...' -a password='...password...'
 
 class MySpider(scrapy.Spider):
     name = 'giveaway'
@@ -12,12 +13,11 @@ class MySpider(scrapy.Spider):
     authenticity_token = ''
     entered_giveaway_count = 0
     rejected_giveaway_count = 0
+    #Since rejected books in one session may be repeated : keep track of them
+    rejected_books_list = set()
 
+    start_urls=["https://www.goodreads.com/user/sign_in",]
 
-
-    start_urls=["https://www.goodreads.com/user/sign_in"]
-
-    # pass arguments as $scrapy crawl read -a html='...string...'
     #LOGIN
     def parse(self, response):
         username = getattr(self, 'username', None)
@@ -46,19 +46,25 @@ class MySpider(scrapy.Spider):
         with open("./EnteredGiveaways.txt", 'a') as f:
             f.write("\n------------------------------- " + str(datetime.now()) + " -------------------------------\n\n")
 
-        #Go to 'giveaway/latest'
-        yield scrapy.Request(url="https://www.goodreads.com/giveaway?sort=recently_listed&tab=recently_listed"
-                             ,callback=self.latest_giveaway)
+        giveaway_starting_urls=[
+            "https://www.goodreads.com/giveaway?sort=ending_soon&tab=ending_soon",          #giveaway/ending_soon
+            "https://www.goodreads.com/giveaway?sort=most_requested&tab=most_requested",    #giveaway/most_requested
+            "https://www.goodreads.com/giveaway?sort=popular_authors&tab=popular_authors",  #givaway/popular_authors
+            "https://www.goodreads.com/giveaway?sort=recently_listed&tab=recently_listed"   #giveaway/latest
+        ]
 
-    #go through List and get link of all latest giveaway pages list
-    def latest_giveaway(self,response):
+        for i,url in enumerate(giveaway_starting_urls):
+            yield scrapy.Request(url=url,callback=self.giveaway_pages)
+
+    #go through List and get link of all giveaway pages
+    def giveaway_pages(self,response):
         #get link of all pages
         pages_list=response.xpath('//a[contains(@href,"/giveaway?page")]/@href').extract()
         pages_list.pop()
         #append 1st page to the pages_list
         pages_list.append(pages_list[0].replace('page=2','page=1'))
 
-        #Next list page available
+        #go to those pages
         for page_url in pages_list:
             yield response.follow(page_url,callback=self.enter_giveaway)
 
@@ -75,7 +81,7 @@ class MySpider(scrapy.Spider):
         giveaway_list_title = giveaway_list_description.xpath('.//a[@class="bookTitle"]/text()').extract()
 
         self.log("\n\n---------------- List at : %s ----------------\n" %response)
-        self.log("\n\n%s \n\n" %giveaway_list_url)
+        self.log("\n\nBooks : %s \n\n" %giveaway_list_title)
 
         #proceed to the individual giveaways
         for i,giveaway_url in enumerate(giveaway_list_url):
@@ -136,14 +142,29 @@ class MySpider(scrapy.Spider):
                         + str(response.url) + "\n")
 
 
+    def close(spider, reason):
+        spider.log('\n\n------------------------------- BOT WORK COMPELETED -------------------------------\n\n')
+        spider.log('\n\n---------------------- Giveaways Entered : %d ---------------------\n'
+                   %spider.entered_giveaway_count)
+        spider.log('\n\n---------------------- Giveaways Ignored : %d ---------------------\n'
+                   % spider.rejected_giveaway_count)
+        spider.log('\n\n---------------------- REGARDS : https://github.com/kaushikthedeveloper/ ---------------------\n\n')
+
 
 #return: boolean - if book should be ignored
 def has_bad_words(self,url,title,content):
 
         is_rejected=False
 
-        bad_words = []      #Will match word to substring
-        bad_titles = []     #Will match word to word
+        url='https://www.goodreads.com'+url
+
+        # if the book is already rejected : return True
+        if url in MySpider.rejected_books_list:
+            return True
+
+        #Fill in your list of words by which giveaway is to be ignored
+        bad_words = []
+        bad_titles = []
 
         #Make everything LowerCase for matching
         title=title.lower()
@@ -159,12 +180,14 @@ def has_bad_words(self,url,title,content):
             is_rejected = True
 
         if is_rejected:
-            self.log('\n\n---------------------- Giveaway Cancelled : %s ---------------------\n\n' % url)
+            self.log('\n\n---------------------- Giveaway Ignored : %s ---------------------\n\n' % url)
 
             MySpider.rejected_giveaway_count += 1
+            MySpider.rejected_books_list.add(url)
+
             with open("./RejectedGiveaways.txt", 'a') as f:
                 f.write(str(self.rejected_giveaway_count) + ". " + str(datetime.now()) + " : \t"
-                    +'https://www.goodreads.com'+ str(url) + "\n")
+                    + str(url) + "\n")
 
             return True
 
