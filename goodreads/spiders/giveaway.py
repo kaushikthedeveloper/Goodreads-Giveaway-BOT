@@ -41,9 +41,9 @@ class MySpider(scrapy.Spider):
                  % username)
 
         #Modify files EnteredGiveaway and RejectedGiveaway to show dateTime
-        with open("./RejectedGiveaways.txt", 'a') as f:
+        with open("./#RejectedGiveaways.txt", 'a') as f:
             f.write("\n------------------------------- " + str(datetime.now()) + " -------------------------------\n\n")
-        with open("./EnteredGiveaways.txt", 'a') as f:
+        with open("./#EnteredGiveaways.txt", 'a') as f:
             f.write("\n------------------------------- " + str(datetime.now()) + " -------------------------------\n\n")
 
         giveaway_starting_urls=[
@@ -137,7 +137,7 @@ class MySpider(scrapy.Spider):
         self.log('\n\n---------------------- Giveaway Entered : %s ---------------------\n\n'%response)
 
         self.entered_giveaway_count+=1
-        with open("./EnteredGiveaways.txt", 'a') as f:
+        with open("./#EnteredGiveaways.txt", 'a') as f:
             f.write(str(self.entered_giveaway_count) + ". " + str(datetime.now()) + " : \t"
                         + str(response.url) + "\n")
 
@@ -185,7 +185,7 @@ def has_bad_words(self,url,title,content):
             MySpider.rejected_giveaway_count += 1
             MySpider.rejected_books_list.add(url)
 
-            with open("./RejectedGiveaways.txt", 'a') as f:
+            with open("./#RejectedGiveaways.txt", 'a') as f:
                 f.write(str(self.rejected_giveaway_count) + ". " + str(datetime.now()) + " : \t"
                     + str(url) + "\n")
 

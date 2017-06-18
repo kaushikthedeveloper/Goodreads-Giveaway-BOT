@@ -1,1 +1,0 @@
-#will contain the List of Giveaways ENTERED when BOT is run
