@@ -47,7 +47,7 @@ This will start the bot with **User logging** in using the Email ID and password
     
       bad_titles = []
       #provide the list of bad_titles in the function has_bad_words()
-      #which will be matched word for word in the Book Title
+      #which will be matched word for word in the Book Title
     ```
     
   - Store the Entered Giveaways list in file : *#EnteredGiveaways.txt*
@@ -64,7 +64,6 @@ This will start the bot with **User logging** in using the Email ID and password
     #Enable Cookies that are received and keeps track of cookies sent by servers, 
     #and sends them back on subsequent requests
     #COOKIES_ENABLED = True
-
     ```
 
-###### *Disclaimer* : The bot only Enters the user onto Giveaway, and does not guarantee that the user will win the Giveaway. Any reaction to the use of the bot is upon the user and the user alone. Use at your own discretion.
+###### **Disclaimer** : *The bot only Enters the user onto Giveaway, and does not guarantee that the user will win the Giveaway. Any reaction upon the use of the bot is upon the user and the user alone. Use at your own discretion.*
