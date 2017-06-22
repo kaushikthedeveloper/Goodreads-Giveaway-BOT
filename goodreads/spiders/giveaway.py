@@ -125,7 +125,8 @@ class MySpider(scrapy.Spider):
                                               'authenticity_token':authenticity_token,
                                               'commit':'Enter Giveaway',
                                               'entry_terms': '1',
-                                              'utf8': "&#x2713;"
+                                              'utf8': "&#x2713;",
+                                              'want_to_read': '0'
                                                     },
                                           formname="entry_form",
                                           callback=self.giveaway_accepted)]
