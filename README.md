@@ -25,7 +25,7 @@ $ pip install Scrapy
 
 Run the crawler 
 ```
-$ scrapy crawl giveaway -a username="***email_id***" password="***password***"
+$ scrapy crawl giveaway -a username="***email_id***" -a password="***password***"
 ```
 
 This will start the bot with **User logging** in using the Email ID and password provided as arguments. Once logged in, the *spider* will start, traversing through the Giveaway pages : [Ending soon](https://www.goodreads.com/giveaway?sort=ending_soon&tab=ending_soon) , [Most requested](https://www.goodreads.com/giveaway?sort=most_requested&tab=most_requested), [Popular authors](https://www.goodreads.com/giveaway?sort=popular_authors&tab=popular_authors) and the [Latest](https://www.goodreads.com/giveaway?sort=popular_authors&tab=popular_authors) *giveaways*
