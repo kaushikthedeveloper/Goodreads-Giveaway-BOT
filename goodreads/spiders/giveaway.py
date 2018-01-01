@@ -1,195 +1,307 @@
 import scrapy
-import json
 from scrapy import FormRequest
 from datetime import datetime
 from scrapy.shell import inspect_response
 
-# $scrapy crawl giveaway -a username='...username...' -a password='...password...'
 
 class MySpider(scrapy.Spider):
+    # define the spider name
     name = 'giveaway'
 
-    #global variable
-    authenticity_token = ''
-    entered_giveaway_count = 0
-    rejected_giveaway_count = 0
-    #Since rejected books in one session may be repeated : keep track of them
-    rejected_books_list = set()
+    # $scrapy crawl giveaway -a username='...username...' -a password='...password...'
 
-    start_urls=["https://www.goodreads.com/user/sign_in",]
+    def __init__(self, category=None, *args, **kwargs):
+        super(MySpider, self).__init__(*args, **kwargs)
 
-    #LOGIN
+        self.start_urls = ["https://www.goodreads.com/user/sign_in", ]
+
+        # intialise all members
+
+        # used for header in POST
+        self.authenticity_token = ''
+        # count of number of entered/rejected books
+        self.entered_giveaway_count = 0
+        self.rejected_giveaway_count = 0
+        # Since rejected books in one session may be repeated : keep track of them
+        # `set` used as same book shouldn't be repeated
+        self.rejected_books_list = set()
+
+        # the files to which logs of Entered and Rejected Giveaways are to be provided
+        self.f_entered_giveaways = '#EnteredGiveaways.txt'
+        self.f_rejected_giveaways = '#RejectedGiveaways.txt'
+
+        # get the username and password passed in the command line
+        self.username = getattr(self, 'username', None)
+        self.password = getattr(self, 'password', None)
+
+        # get the words to be used to ignore books (not apply for giveaway)
+        # usually used for ignoring books that contain bad words
+        # `list` if provided | `None` if nothing is provided
+
+        # from the title of the book
+        f_blacklisted_titles = 'blacklisted_titles.txt'
+        self.blacklisted_titles = get_file_contents(f_blacklisted_titles)
+        # from the content description of the book
+        f_blacklisted_words = 'blacklisted_words.txt'
+        self.blacklisted_words = get_file_contents(f_blacklisted_words)
+
+        # urls containing the giveaway lists
+        self.giveaway_starting_urls = [
+            "https://www.goodreads.com/giveaway?sort=ending_soon&tab=ending_soon",  # giveaway/ending_soon
+            "https://www.goodreads.com/giveaway?sort=most_requested&tab=most_requested",  # giveaway/most_requested
+            "https://www.goodreads.com/giveaway?sort=popular_authors&tab=popular_authors",  # givaway/popular_authors
+            "https://www.goodreads.com/giveaway?sort=recently_listed&tab=recently_listed"  # giveaway/latest
+        ]
+
+    '''
+    LOGIN : use the username and password passed by the user
+    '''
+
     def parse(self, response):
-        username = getattr(self, 'username', None)
-        password = getattr(self,'password', None)
+        # submit for login
         return [FormRequest.from_response(response,
-                                          formdata={'user[email]': username,
-                                                    'user[password]': password},
+                                          formdata={'user[email]': self.username,
+                                                    'user[password]': self.password},
                                           formname="sign_in",
                                           callback=self.after_login)]
 
+    '''
+    If Login not successful => exit
+    Otherwise :
+    => proceed to giveaway start pages having
+        - Ending soon
+        - Most Requested
+        - Popular Authors
+        - Recently listed
+    '''
 
     def after_login(self, response):
-        # check login succeed before going on
-        if "authentication failed" in response.body:
-            self.logger.error("Login failed")
+
+        # login failed => close the spider
+        if "sign_in" in response.url or b'try again' in response.body:
+            self.logger.error("\n\n-------------------------- Login failed --------------------------\n\n")
             return
 
-        #Login Successful
-        username = getattr(self, 'username', None)
-        self.log("\n\n------------------------ Logged in successfully : %s --------------------------\n\n"
-                 % username)
+        # login successful
+        self.log("\n\n-------------------------- Logged in successfully : %s --------------------------\n\n"
+                 % self.username)
 
-        #Modify files EnteredGiveaway and RejectedGiveaway to show dateTime
-        with open("./#RejectedGiveaways.txt", 'a') as f:
-            f.write("\n------------------------------- " + str(datetime.now()) + " -------------------------------\n\n")
-        with open("./#EnteredGiveaways.txt", 'a') as f:
-            f.write("\n------------------------------- " + str(datetime.now()) + " -------------------------------\n\n")
+        # Modify files EnteredGiveaway and RejectedGiveaway to show present date-time
+        # append to the end
+        with open(self.f_rejected_giveaways, 'a') as f:
+            f.write("\n-------------------------- " + str(datetime.now()) + " --------------------------\n\n")
+        with open(self.f_entered_giveaways, 'a') as f:
+            f.write("\n-------------------------- " + str(datetime.now()) + " --------------------------\n\n")
 
-        giveaway_starting_urls=[
-            "https://www.goodreads.com/giveaway?sort=ending_soon&tab=ending_soon",          #giveaway/ending_soon
-            "https://www.goodreads.com/giveaway?sort=most_requested&tab=most_requested",    #giveaway/most_requested
-            "https://www.goodreads.com/giveaway?sort=popular_authors&tab=popular_authors",  #givaway/popular_authors
-            "https://www.goodreads.com/giveaway?sort=recently_listed&tab=recently_listed"   #giveaway/latest
-        ]
+        # traverse to the giveaway list pages
+        for url in self.giveaway_starting_urls:
+            yield scrapy.Request(url=url, callback=self.giveaway_pages)
 
-        for i,url in enumerate(giveaway_starting_urls):
-            yield scrapy.Request(url=url,callback=self.giveaway_pages)
+    '''
+    Get list of the url of other pages in the tab (ex : Recently Listed tab contains pages in form of 1,2...next>>)
+    '''
 
-    #go through List and get link of all giveaway pages
-    def giveaway_pages(self,response):
-        #get link of all pages
-        pages_list=response.xpath('//a[contains(@href,"/giveaway?page")]/@href').extract()
+    def giveaway_pages(self, response):
+        # get link of all pages
+        pages_list = response.xpath('//a[contains(@href,"/giveaway?page")]/@href').extract()
         pages_list.pop()
-        #append 1st page to the pages_list
-        pages_list.append(pages_list[0].replace('page=2','page=1'))
+        # append 1st page to the pages_list
+        pages_list.append(pages_list[0].replace('page=2', 'page=1'))
 
-        #go to those pages
+        # go to those pages
         for page_url in pages_list:
-            yield response.follow(page_url,callback=self.enter_giveaway)
+            yield response.follow(page_url, callback=self.enter_giveaway)
 
+    '''
+    Go through Giveaway List - get the urls to proceed for giveaway
 
-    #get the urls to proceed for giveaway
-    def enter_giveaway(self,response):
-        #inspect_response(response, self)
+    NOTE : the spider employs a Depth First approach for the traversals
+    '''
 
-        #Find 'Enter Giveaway' button and then find its main parent conatiner
+    def enter_giveaway(self, response):
+        # Find 'Enter Giveaway' button and then find its main parent conatiner
         giveaway_list = response.xpath('//a[contains(text(),"Enter Giveaway")]/parent::div/parent::div/parent::li')
         giveaway_list_description = giveaway_list.xpath('.//div[@class="description descriptionContainer"]')
 
+        # giveaway url
         giveaway_list_url = giveaway_list.xpath('.//a[contains(text(),"Enter Giveaway")]/@href').extract()
+        # book title
         giveaway_list_title = giveaway_list_description.xpath('.//a[@class="bookTitle"]/text()').extract()
 
-        self.log("\n\n---------------- List at : %s ----------------\n" %response)
-        self.log("\n\nBooks : %s \n\n" %giveaway_list_title)
+        self.log("\n\n-------------------------- List at : %s --------------------------\n" % response)
+        self.log("\n\nBooks : %s \n\n" % giveaway_list_title)
 
-        #proceed to the individual giveaways
-        for i,giveaway_url in enumerate(giveaway_list_url):
-            #get the content of the book (hidden content not always available)
+        # proceed to the individual giveaways
+        for i, giveaway_url in enumerate(giveaway_list_url):
+            # get the description of the book
+            # may contain hidden content (hidden content not always available)
             content_container = giveaway_list_description[i].xpath('div[@class="giveawayDescriptionDetails"]')
-
             giveaway_hidden_content = content_container.xpath('span[contains(@style,"display")]//text()').extract()
-            #check if hidden content available : using len since hidden_content is Array (extract())
+
+            # check if hidden content available : using len since hidden_content is Array (extract())
             if len(giveaway_hidden_content) is 0:
-                #Visibile content used : `join` in case there are more elements inside the span
-                giveaway_content=' '.join(content_container.xpath('span//text()').extract_first())
+                # Visibile content used : `join` in case there are more elements inside the span
+                giveaway_content = ' '.join(content_container.xpath('span//text()').extract_first())
             else:
-                giveaway_content=' '.join(giveaway_hidden_content)
+                giveaway_content = ' '.join(giveaway_hidden_content)
 
-            #check if the book should be ignored
-            if(has_bad_words(self,giveaway_url,giveaway_list_title[i],giveaway_content)):
+            # check if the book should be ignored (is Blacklisted)
+            if (is_blacklisted(self, giveaway_url, giveaway_list_title[i], giveaway_content)):
+                # ignore this giveaway - go to next
                 continue
-            yield response.follow(giveaway_url,callback=self.select_address)
 
+            # go to the giveaway
+            yield response.follow(giveaway_url, callback=self.select_address)
 
-    def select_address(self,response):
-        next_page=response.xpath('//a[contains(text(),"Select This Address")]/@href').extract_first()
+    '''
+    Inside Giveaway page
+    => select the 1st address (should be already arranged by user prior to running the spider)
+    '''
 
-        #change the value in the global authenticity token
-        global authenticity_token
-        authenticity_token=response.xpath('//meta[@name="csrf-token"]/@content').extract_first()
+    def select_address(self, response):
+        # 1st button (Select this address)
+        next_page = response.xpath('//a[contains(text(),"Select This Address")]/@href').extract_first()
+
+        # change the value of the authenticity token
+        self.authenticity_token = response.xpath('//meta[@name="csrf-token"]/@content').extract_first()
 
         if next_page is not None:
-            #post method here
-            return [FormRequest(url='https://www.goodreads.com'+next_page,
-                                              formdata={
-                                                  'authenticity_token':authenticity_token
-                                              },
-                                              callback=self.final_page)]
+            # post method here
+            return [FormRequest(url='https://www.goodreads.com' + next_page,
+                                formdata={
+                                    'authenticity_token': self.authenticity_token
+                                },
+                                callback=self.final_page)
+                    ]
 
+    '''
+    Page for confirmation
+        the post method provides
+        => check  'I have read and agree to the giveaway entry terms and conditions'
+        => uncheck  'Also add this book to my to-read shelf'
 
-    #page for confirmation : send post request
-    def final_page(self,response):
+    NOTE : user is entered into the Giveaway at this stage
+    '''
+
+    def final_page(self, response):
         return [FormRequest.from_response(response,
                                           formdata={
-                                              'authenticity_token':authenticity_token,
-                                              'commit':'Enter Giveaway',
+                                              'authenticity_token': self.authenticity_token,
+                                              'commit': 'Enter Giveaway',
                                               'entry_terms': '1',
                                               'utf8': "&#x2713;",
                                               'want_to_read': '0'
-                                                    },
+                                          },
                                           formname="entry_form",
-                                          callback=self.giveaway_accepted)]
+                                          callback=self.giveaway_accepted)
+                ]
 
+    # Final page : done
+    '''
+    Final page - user has been entered into the Giveaway by now
+    => inform user
+    => increment Entered giveaway count
+    '''
 
-    #Final page : done
-    def giveaway_accepted(self,response):
-        #inspect_response(response,self)
-        self.log('\n\n---------------------- Giveaway Entered : %s ---------------------\n\n'%response)
+    def giveaway_accepted(self, response):
+        # inspect_response(response,self)
+        self.log('\n\n-------------------------- Giveaway Entered : %s --------------------------\n\n' % response)
 
-        self.entered_giveaway_count+=1
-        with open("./#EnteredGiveaways.txt", 'a') as f:
+        self.entered_giveaway_count += 1
+        with open(self.f_entered_giveaways, 'a') as f:
             f.write(str(self.entered_giveaway_count) + ". " + str(datetime.now()) + " : \t"
-                        + str(response.url) + "\n")
+                    + str(response.url) + "\n")
 
+    '''
+    @overridden close
+    Before closing the Spider - show final log to user
+    '''
 
     def close(spider, reason):
         spider.log('\n\n------------------------------- BOT WORK COMPELETED -------------------------------\n\n')
-        spider.log('\n\n---------------------- Giveaways Entered : %d ---------------------\n'
-                   %spider.entered_giveaway_count)
-        spider.log('\n\n---------------------- Giveaways Ignored : %d ---------------------\n'
+        spider.log('\n\n-------------------------- Giveaways Entered : %d --------------------------\n'
+                   % spider.entered_giveaway_count)
+        spider.log('\n\n-------------------------- Giveaways Ignored : %d --------------------------\n'
                    % spider.rejected_giveaway_count)
-        spider.log('\n\n---------------------- REGARDS : https://github.com/kaushikthedeveloper/ ---------------------\n\n')
+        spider.log('\n\n------------------------------- REGARDS -------------------------------\n\n')
 
 
-#return: boolean - if book should be ignored
-def has_bad_words(self,url,title,content):
+'''
+return boolean - is blacklisted (title/content)
+=> check if the title contains any words (whole) that are Blacklisted
+=> check if the description contains any words/sub-words that are Blacklisted
 
-        is_rejected=False
+ - incase either of the two files are empty, ignore them
 
-        url='https://www.goodreads.com'+url
+if is_rejected=True => call giveaway_rejected()
+'''
 
-        # if the book is already rejected : return True
-        if url in MySpider.rejected_books_list:
-            return True
 
-        #Fill in your list of words by which giveaway is to be ignored
-        bad_words = []
-        bad_titles = []
+def is_blacklisted(self, url, title, content):
+    # flag
+    is_rejected = False
 
-        #Make everything LowerCase for matching
-        title=title.lower()
-        content=content.lower()
+    # book url
+    url = 'https://www.goodreads.com' + url
 
-        #doing title.split() so that "whole word" is matched
-        #sub_string.lower() to convert to LowerCase in case Case-sensitive word provided
-        if any(sub_string.lower() in title.split() for sub_string in bad_titles):
-            is_rejected = True
+    # if the book is already rejected : return True
+    if url in self.rejected_books_list:
+        return True
 
-        # sub_string.lower() to convert to LowerCase in case Case-sensitive word provided
-        if any(sub_string.lower() in content for sub_string in bad_words):
-            is_rejected = True
+    # Make everything LowerCase for matching
+    title = title.lower()
+    content = content.lower()
 
-        if is_rejected:
-            self.log('\n\n---------------------- Giveaway Ignored : %s ---------------------\n\n' % url)
+    # doing title.split() so that "whole word" is matched
+    # sub_string.lower() to convert to LowerCase in case Case-sensitive word provided
+    if len(self.blacklisted_titles) > 0 and \
+            any(sub_string.lower() in title.split() for sub_string in self.blacklisted_titles):
+        is_rejected = True
 
-            MySpider.rejected_giveaway_count += 1
-            MySpider.rejected_books_list.add(url)
+    # sub_string.lower() to convert to LowerCase in case Case-sensitive word provided
+    if len(self.blacklisted_words) > 0 and \
+            any(sub_string.lower() in content for sub_string in self.blacklisted_words):
+        is_rejected = True
 
-            with open("./#RejectedGiveaways.txt", 'a') as f:
-                f.write(str(self.rejected_giveaway_count) + ". " + str(datetime.now()) + " : \t"
-                    + str(url) + "\n")
-
-            return True
-
+    # giveaway is rejected
+    if is_rejected:
+        giveaway_rejected(self, url)
+        return True
+    else:
         return False
+
+
+'''
+Upon giveaway being rejected
+=> inform user
+=> increment Rejected giveaway count
+'''
+
+
+def giveaway_rejected(self, url):
+    self.log('\n\n-------------------------- Giveaway Ignored : %s --------------------------\n\n' % url)
+
+    self.rejected_giveaway_count += 1
+    self.rejected_books_list.add(url)
+
+    with open(self.f_rejected_giveaways, 'a') as f:
+        f.write(str(self.rejected_giveaway_count) + ". " + str(datetime.now()) + " : \t"
+                + str(url) + "\n")
+
+
+'''
+Get contents in the file
+=> split with delimiter `newline` (each line contains the word)
+=> strip whitespace
+=> ignore empty lines
+'''
+
+
+def get_file_contents(filename):
+    with open(filename) as f:
+        required_list = [words.strip() for words in f.readlines() if len(words.strip()) > 0]
+
+    if required_list > 0:
+        return required_list
+    else:
+        return None
