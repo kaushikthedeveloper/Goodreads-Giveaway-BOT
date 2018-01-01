@@ -5,7 +5,8 @@ An automated Bot that enters the *User* onto [Giveaways on Goodreads](https://ww
 
 ### User
 
-The user needs to have a [Goodreads Account](https://www.goodreads.com/user/sign_in)
+1. The user needs to have a [Goodreads Account](https://www.goodreads.com/user/sign_in).
+2. The user needs to have atleast one shipping address saved beforehand.
 
 ### Installation
 
