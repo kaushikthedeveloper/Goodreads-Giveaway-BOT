@@ -34,7 +34,7 @@ class MySpider(scrapy.Spider):
         self.username = getattr(self, 'username', None)
         self.password = getattr(self, 'password', None)
 
-        # get the words to be used to ignore books (not apply for giveaway)
+        # get the words to be used to ignore books (not apply for giveaway) - from the files
         # usually used for ignoring books that contain bad words
         # `list` if provided | `None` if nothing is provided
 
@@ -254,12 +254,12 @@ def is_blacklisted(self, url, title, content):
 
     # doing title.split() so that "whole word" is matched
     # sub_string.lower() to convert to LowerCase in case Case-sensitive word provided
-    if len(self.blacklisted_titles) > 0 and \
+    if self.blacklisted_titles != None and \
             any(sub_string.lower() in title.split() for sub_string in self.blacklisted_titles):
         is_rejected = True
 
     # sub_string.lower() to convert to LowerCase in case Case-sensitive word provided
-    if len(self.blacklisted_words) > 0 and \
+    if self.blacklisted_words != None and \
             any(sub_string.lower() in content for sub_string in self.blacklisted_words):
         is_rejected = True
 
@@ -301,7 +301,7 @@ def get_file_contents(filename):
     with open(filename) as f:
         required_list = [words.strip() for words in f.readlines() if len(words.strip()) > 0]
 
-    if required_list > 0:
+    if len(required_list) > 0:
         return required_list
     else:
         return None
