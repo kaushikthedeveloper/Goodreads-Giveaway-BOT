@@ -49,7 +49,6 @@ class MySpider(scrapy.Spider):
         self.giveaway_starting_urls = [
             "https://www.goodreads.com/giveaway?sort=ending_soon&tab=ending_soon",  # giveaway/ending_soon
             "https://www.goodreads.com/giveaway?sort=most_requested&tab=most_requested",  # giveaway/most_requested
-            "https://www.goodreads.com/giveaway?sort=featured&tab=featured",  # givaway/featured
             "https://www.goodreads.com/giveaway?sort=recently_listed&tab=recently_listed"  # giveaway/latest
         ]
 
